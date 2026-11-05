@@ -23,7 +23,7 @@ local Native = Modules[1]
 local Selective = Modules[2]
 local Bytecode = Modules[3]
 check(Native.NativeMode == "full" and Selective.NativeMode == "selective" and Bytecode.NativeMode == "bytecode", "native modes")
-check(Native.Version == "1.0.0" and Selective.Version == Native.Version and Bytecode.Version == Native.Version, "module version")
+check(Native.Version == "1.0.1" and Selective.Version == Native.Version and Bytecode.Version == Native.Version, "module version")
 
 local function near(A: number, B: number, Epsilon: number): boolean
 	return math.abs(A - B) <= Epsilon

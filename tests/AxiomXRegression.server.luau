@@ -27,7 +27,7 @@ local function vec(A: Vector3, B: Vector3, Tolerance: number?): boolean
 	return (A - B).Magnitude <= (Tolerance or 1e-5)
 end
 
-check("Version", AxiomX.Version == "1.0.0")
+check("Version", AxiomX.Version == "1.0.1")
 check("IsFinite", AxiomX.IsFinite(5) and not AxiomX.IsFinite(math.huge) and not AxiomX.IsFinite(0 / 0))
 check("Clamp01", AxiomX.Clamp01(2) == 1 and AxiomX.Clamp01(-2) == 0)
 check("Lerp", near(AxiomX.Lerp(2, 10, 0.25), 4))

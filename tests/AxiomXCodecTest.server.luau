@@ -32,7 +32,7 @@ local function angleError(A: number, B: number): number
 	return math.abs((A - B + 180) % 360 - 180)
 end
 
-check("Version", AxiomX.Version == "5.0.0" and Codec.Version == 1)
+check("Version", AxiomX.Version == "1.0.1" and Codec.Version == 1)
 check("Profile sizes", Codec.GetBytes(1) == 9 and Codec.GetBytes(2) == 14 and Codec.GetBytes(3) == 15 and Codec.GetBytes(4) == 30)
 check("Reject unknown profile", Codec.GetBytes(5) == nil and Codec.NewBuffer(0) == nil)
 check("Savings 193 to 30", near(Codec.SavingsPercent(193, 30), 84.455958549, 1e-7))

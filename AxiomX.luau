@@ -2,10 +2,10 @@
 --!optimize 2
 --!strict
 
-local Workspace = game:GetService("Workspace")
+local Workspace: Workspace = game:GetService("Workspace")
 local AxiomX = {}
 
-AxiomX.Version = "1.0.0"
+AxiomX.Version = "1.0.1"
 AxiomX.Epsilon = 1e-8
 AxiomX.RayLimit = 1000
 AxiomX.MaxRayDistance = 15000
@@ -16,10 +16,10 @@ AxiomX.MaxTrajectorySteps = 256
 AxiomX.AllocationPolicy = "Pure math avoids Lua result tables; Into/Codec reuse caller buffers; physics APIs may allocate"
 AxiomX.NativeMode = "full"
 
-local ZERO = Vector3.zero
-local UP = Vector3.yAxis
-local HUGE = math.huge
-local EPS = AxiomX.Epsilon
+local ZERO: Vector3 = Vector3.zero
+local UP: Vector3 = Vector3.yAxis
+local HUGE: number = math.huge
+local EPS: number = AxiomX.Epsilon
 
 export type ImpactData = {
 	Result: RaycastResult,
@@ -313,7 +313,8 @@ function AxiomX.SpheresOverlap(CenterA: Vector3, RadiusA: number, CenterB: Vecto
 end
 
 function AxiomX.PointInCone(Point: Vector3, Apex: Vector3, Forward: Vector3, AngleDegrees: number, MaxDistance: number): boolean
-	if AngleDegrees < 0 or AngleDegrees > 180 or MaxDistance < 0 then return false end
+	if not finite(AngleDegrees) or not finite(MaxDistance) or AngleDegrees < 0 or AngleDegrees > 180 or MaxDistance < 0 then return false end
+	if not AxiomX.IsFiniteVector(Point) or not AxiomX.IsFiniteVector(Apex) or not AxiomX.IsFiniteVector(Forward) then return false end
 	local Delta = Point - Apex
 	local Length = Delta.Magnitude
 	if Length > MaxDistance then return false end
@@ -323,7 +324,9 @@ function AxiomX.PointInCone(Point: Vector3, Apex: Vector3, Forward: Vector3, Ang
 end
 
 function AxiomX.PointInViewCone(Point: Vector3, Camera: CFrame, FullAngleDegrees: number, MaxDistance: number?): boolean
-	if FullAngleDegrees < 0 or FullAngleDegrees > 360 then return false end
+	if not finite(FullAngleDegrees) or FullAngleDegrees < 0 or FullAngleDegrees > 360 then return false end
+	if MaxDistance ~= nil and (MaxDistance < 0 or (MaxDistance ~= HUGE and not finite(MaxDistance))) then return false end
+	if not AxiomX.IsFiniteVector(Point) or not AxiomX.IsFiniteVector(Camera.Position) then return false end
 	local Delta = Point - Camera.Position
 	local Limit = MaxDistance or HUGE
 	local Length = Delta.Magnitude
@@ -338,16 +341,16 @@ end
 
 -- Engine queries. CastRay defaults to AxiomX.RayLimit; Raycast uses raw displacement.
 function AxiomX.MakeRaycastParams(Exclude: {Instance}?, CollisionGroup: string?): RaycastParams
-	local Params = RaycastParams.new()
+	local Params: RaycastParams = RaycastParams.new()
 	Params.ExcludeInstances = Exclude
 	if CollisionGroup then Params.CollisionGroup = CollisionGroup end
 	return Params
 end
 
 function AxiomX.MakeOverlapParams(Exclude: {Instance}?, MaxParts: number?, CollisionGroup: string?): OverlapParams
-	local Params = OverlapParams.new()
+	local Params: OverlapParams = OverlapParams.new()
 	Params.ExcludeInstances = Exclude
-	Params.MaxParts = if MaxParts and finite(MaxParts) then math.max(0, math.floor(MaxParts)) else 0
+	Params.MaxParts = if MaxParts and finite(MaxParts) then math.min(2147483647, math.max(0, math.floor(MaxParts))) else 0
 	if CollisionGroup then Params.CollisionGroup = CollisionGroup end
 	return Params
 end
@@ -438,7 +441,7 @@ function AxiomX.GetPartsInRadius(Center: Vector3, Radius: number, Params: Overla
 end
 
 function AxiomX.GetPartsInBox(Box: CFrame, Size: Vector3, Params: OverlapParams?): {BasePart}
-	if not AxiomX.IsFiniteVector(Size) or Size.X <= 0 or Size.Y <= 0 or Size.Z <= 0 then return {} end
+	if not AxiomX.IsFiniteVector(Box.Position) or not AxiomX.IsFiniteVector(Size) or Size.X <= 0 or Size.Y <= 0 or Size.Z <= 0 then return {} end
 	return Workspace:GetPartBoundsInBox(Box, Size, Params)
 end
 
@@ -543,7 +546,7 @@ function AxiomX.BounceVelocity(Velocity: Vector3, Normal: Vector3, Restitution: 
 end
 
 function AxiomX.TraceProjectile(Origin: Vector3, Velocity: Vector3, Duration: number, Steps: number, Params: RaycastParams?, Gravity: Vector3?): ProjectileHit?
-	if Duration <= 0 or not finite(Duration) or Steps < 1 or Steps > AxiomX.MaxTrajectorySteps or Steps % 1 ~= 0 then return nil end
+	if Duration <= 0 or not finite(Duration) or not finite(Steps) or Steps < 1 or Steps > AxiomX.MaxTrajectorySteps or Steps % 1 ~= 0 then return nil end
 	if not AxiomX.IsFiniteVector(Origin) or not AxiomX.IsFiniteVector(Velocity) then return nil end
 	local Acceleration = gravityVector(Gravity)
 	if not AxiomX.IsFiniteVector(Acceleration) then return nil end
@@ -825,6 +828,7 @@ function AxiomX.RaySphereIntersection(Origin: Vector3, Direction: Vector3, Cente
 	local A = Direction:Dot(Direction)
 	if A <= EPS * EPS or not finite(A) then return nil, nil end
 	local Difference = Origin - Center
+	if Difference:Dot(Difference) <= Radius * Radius then return Origin, 0 end
 	local B = 2 * Difference:Dot(Direction)
 	local C = Difference:Dot(Difference) - Radius * Radius
 	local Discriminant = B * B - 4 * A * C
@@ -912,6 +916,8 @@ function AxiomX.Barycentric(Point: Vector3, A: Vector3, B: Vector3, C: Vector3):
 end
 
 function AxiomX.PointInTriangle(Point: Vector3, A: Vector3, B: Vector3, C: Vector3, Tolerance: number?): boolean
+	if Tolerance ~= nil and (not finite(Tolerance) or Tolerance < 0) then return false end
+	if not AxiomX.IsFiniteVector(Point) or not AxiomX.IsFiniteVector(A) or not AxiomX.IsFiniteVector(B) or not AxiomX.IsFiniteVector(C) then return false end
 	local N = AxiomX.TriangleNormal(A, B, C)
 	if N == ZERO or math.abs((Point - A):Dot(N)) > (Tolerance or 1e-5) then return false end
 	local U, V, W = AxiomX.Barycentric(Point, A, B, C)
@@ -919,12 +925,12 @@ function AxiomX.PointInTriangle(Point: Vector3, A: Vector3, B: Vector3, C: Vecto
 end
 
 -- Engine operations (WorldRoot). Pass reusable Params for hot paths.
-function AxiomX.SetRaycastFilters(Params: RaycastParams, Include: {Instance}?, Exclude: {Instance}?)
+function AxiomX.SetRaycastFilters(Params: RaycastParams, Include: {Instance}?, Exclude: {Instance}?): ()
 	Params.IncludeInstances = Include
 	Params.ExcludeInstances = Exclude
 end
 
-function AxiomX.SetOverlapFilters(Params: OverlapParams, Include: {Instance}?, Exclude: {Instance}?)
+function AxiomX.SetOverlapFilters(Params: OverlapParams, Include: {Instance}?, Exclude: {Instance}?): ()
 	Params.IncludeInstances = Include
 	Params.ExcludeInstances = Exclude
 end
@@ -943,15 +949,16 @@ function AxiomX.CastBlockDisplacement(Box: CFrame, Size: Vector3, Displacement: 
 end
 
 function AxiomX.CastShape(Part: BasePart, Direction: Vector3, Distance: number?, Params: RaycastParams?, CFrameOverride: CFrame?, SizeOverride: Vector3?): RaycastResult?
-	if SizeOverride and (not AxiomX.IsFiniteVector(SizeOverride) or SizeOverride.X < 0 or SizeOverride.Y < 0 or SizeOverride.Z < 0 or SizeOverride.X > 512 or SizeOverride.Y > 512 or SizeOverride.Z > 512) then return nil end
+	if not AxiomX.IsFiniteVector((CFrameOverride or Part.CFrame).Position) then return nil end
+	if SizeOverride and (not AxiomX.IsFiniteVector(SizeOverride) or SizeOverride.X <= 0 or SizeOverride.Y <= 0 or SizeOverride.Z <= 0 or SizeOverride.X > 512 or SizeOverride.Y > 512 or SizeOverride.Z > 512) then return nil end
 	local Displacement = scalarRay(Direction, Distance, AxiomX.MaxSweepDistance)
 	return if Displacement then Workspace:Shapecast(Part, Displacement, Params, CFrameOverride, SizeOverride) else nil
 end
 
 function AxiomX.CastShapeDisplacement(Part: BasePart, Displacement: Vector3, Params: RaycastParams?, CFrameOverride: CFrame?, SizeOverride: Vector3?): RaycastResult?
 	local Length = Displacement.Magnitude
-	if Length <= EPS or Length > AxiomX.MaxSweepDistance or not finite(Length) then return nil end
-	if SizeOverride and (not AxiomX.IsFiniteVector(SizeOverride) or SizeOverride.X < 0 or SizeOverride.Y < 0 or SizeOverride.Z < 0 or SizeOverride.X > 512 or SizeOverride.Y > 512 or SizeOverride.Z > 512) then return nil end
+	if Length <= EPS or Length > AxiomX.MaxSweepDistance or not finite(Length) or not AxiomX.IsFiniteVector((CFrameOverride or Part.CFrame).Position) then return nil end
+	if SizeOverride and (not AxiomX.IsFiniteVector(SizeOverride) or SizeOverride.X <= 0 or SizeOverride.Y <= 0 or SizeOverride.Z <= 0 or SizeOverride.X > 512 or SizeOverride.Y > 512 or SizeOverride.Z > 512) then return nil end
 	return Workspace:Shapecast(Part, Displacement, Params, CFrameOverride, SizeOverride)
 end
 
@@ -1059,9 +1066,10 @@ function AxiomX.GetMaximumHeight(StartY: number, InitialVerticalSpeed: number, G
 end
 
 function AxiomX.SampleProjectilePath(Origin: Vector3, Velocity: Vector3, Duration: number, Steps: number, Gravity: Vector3?): {Vector3}
-	if Duration < 0 or not finite(Duration) or Steps < 1 or Steps > AxiomX.MaxTrajectorySteps or Steps % 1 ~= 0 then return {} end
-	local Points = table.create(Steps + 1)
+	if not finite(Duration) or Duration < 0 or not finite(Steps) or Steps < 1 or Steps > AxiomX.MaxTrajectorySteps or Steps % 1 ~= 0 then return {} end
 	local G = gravityVector(Gravity)
+	if not AxiomX.IsFiniteVector(Origin) or not AxiomX.IsFiniteVector(Velocity) or not AxiomX.IsFiniteVector(G) then return {} end
+	local Points: {Vector3} = table.create(Steps + 1)
 	for Index = 0, Steps do
 		local Time = Duration * Index / Steps
 		Points[Index + 1] = Origin + Velocity * Time + G * (0.5 * Time * Time)
@@ -1070,7 +1078,7 @@ function AxiomX.SampleProjectilePath(Origin: Vector3, Velocity: Vector3, Duratio
 end
 
 function AxiomX.TraceProjectileSphere(Origin: Vector3, Velocity: Vector3, Radius: number, Duration: number, Steps: number, Params: RaycastParams?, Gravity: Vector3?): ProjectileHit?
-	if not finite(Radius) or Radius <= 0 or Radius > AxiomX.MaxSphereRadius or Duration <= 0 or not finite(Duration) or Steps < 1 or Steps > AxiomX.MaxTrajectorySteps or Steps % 1 ~= 0 then return nil end
+	if not finite(Radius) or Radius <= 0 or Radius > AxiomX.MaxSphereRadius or Duration <= 0 or not finite(Duration) or not finite(Steps) or Steps < 1 or Steps > AxiomX.MaxTrajectorySteps or Steps % 1 ~= 0 then return nil end
 	if not AxiomX.IsFiniteVector(Origin) or not AxiomX.IsFiniteVector(Velocity) then return nil end
 	local G = gravityVector(Gravity)
 	if not AxiomX.IsFiniteVector(G) then return nil end
@@ -1261,7 +1269,7 @@ function AxiomX.FastRayPlaneTime(Origin: Vector3, Direction: Vector3, PlanePoint
 end
 
 function AxiomX.FastRaySphereTime(Origin: Vector3, Direction: Vector3, Center: Vector3, Radius: number): number?
-	if Radius < 0 or not finite(Radius) then return nil end
+	if Radius < 0 or not finite(Radius) or not AxiomX.IsFiniteVector(Origin) or not AxiomX.IsFiniteVector(Direction) or not AxiomX.IsFiniteVector(Center) then return nil end
 	local A = Direction:Dot(Direction)
 	if A <= EPS * EPS or not finite(A) then return nil end
 	local Offset = Origin - Center
@@ -1486,7 +1494,7 @@ end
 
 function AxiomX.GetPartsInBoxInto(Box: CFrame, Size: Vector3, Params: OverlapParams?, Out: {BasePart}): number
 	table.clear(Out)
-	if not AxiomX.IsFiniteVector(Size) or Size.X <= 0 or Size.Y <= 0 or Size.Z <= 0 then return 0 end
+	if not AxiomX.IsFiniteVector(Box.Position) or not AxiomX.IsFiniteVector(Size) or Size.X <= 0 or Size.Y <= 0 or Size.Z <= 0 then return 0 end
 	local Parts = Workspace:GetPartBoundsInBox(Box, Size, Params)
 	for Index = 1, #Parts do Out[Index] = Parts[Index] end
 	return #Parts
@@ -1502,7 +1510,7 @@ function AxiomX.MakeProjectileBuffer(): ProjectileBuffer
 	return Buffer
 end
 
--- AxiomX Codec v5: fixed-schema quantized snapshots, allocated only by explicit constructors.
+-- AxiomX Codec v1: fixed-schema quantized snapshots, allocated only by explicit constructors.
 -- Bit layouts are little-endian within Roblox buffers (bit offsets start at zero).
 -- The codec cannot losslessly compress arbitrary binary data. Never use it for exact currency, inventories, or security-sensitive state.
 export type FullSnapshot = {
@@ -1566,8 +1574,9 @@ local function validPosition(Position: Vector3): boolean
 	return typeof(Position) == "Vector3" and AxiomX.IsFiniteVector(Position)
 end
 
-local function validPayload(Input: any, Length: number, Profile: number, PaddingOffset: number, PaddingBits: number): boolean
-	return typeof(Input) == "buffer" and buffer.len(Input) == Length and buffer.readu8(Input, 0) == 0x50 + Profile and buffer.readbits(Input, PaddingOffset, PaddingBits) == 0
+local function validPayload(Input: unknown, Length: number, Profile: number, PaddingOffset: number, PaddingBits: number): boolean
+	if typeof(Input) ~= "buffer" then return false end
+	return buffer.len(Input) == Length and buffer.readu8(Input, 0) == 0x50 + Profile and buffer.readbits(Input, PaddingOffset, PaddingBits) == 0
 end
 
 local function positionCodes(Position: Vector3): (number?, number?, number?)
